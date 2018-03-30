@@ -34,7 +34,6 @@
     "eslint-plugin-prettier": "^2.6.0",
     "husky": "^0.14.3",
     "prettier": "^1.11.1",
-    "semantic-release": "^15.1.4",
     "serverless": "^1.26.1",
     "travis-deploy-once": "^4.4.1"
   },
@@ -47,5 +46,8 @@
   },
   "release": {
     "verifyConditions": "condition-noop"
+  },
+  "optionalDependencies": {
+    "semantic-release": "^15.1.4"
   }
 }
