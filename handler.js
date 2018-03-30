@@ -15,8 +15,7 @@ const converter = (event, context, cb) => {
       record =>
         record.eventSource === 'aws:s3' &&
         record.eventName === 'ObjectCreated:Put'
-    )
-    .map(record =>
+    ).map(record =>
       new Promise((resolve, reject) => {
         console.log(`making tmpdir for ${record.s3.object.key}`);
         temp.mkdir(record.s3.object.key, (err, res) => {
@@ -52,7 +51,7 @@ const converter = (event, context, cb) => {
             new Promise((resolve, reject) => {
               console.log(`unzipping ${data.length} bytes`);
               const buffStream = new stream.PassThrough();
-              buffStream.end(data)
+              buffStream.end(data);
 
               buffStream
                 .pipe(unzip.Extract({ path }))
@@ -63,21 +62,19 @@ const converter = (event, context, cb) => {
                 .on('error', err => reject(err));
             })
         )
-        .then(
-          path =>
-            new Promise((resolve, reject) => {
-              console.log('finding obj files');
-              fs.readdir(path, (err, res) => {
-                if (err) {
-                  return reject(err);
-                }
+        .then(path =>
+          new Promise((resolve, reject) => {
+            console.log('finding obj files');
+            fs.readdir(path, (err, res) => {
+              if (err) {
+                return reject(err);
+              }
 
-                // This assumes that the files to convert will all be *.obj. If that
-                // assumption is incorrect a different approach at discovery will be necessary.
-                return resolve(res.filter(file => file.match(/.obj$/)));
-              })
-            })
-              .then(files => ({ path, files }))
+              // This assumes that the files to convert will all be *.obj. If that
+              // assumption is incorrect a different approach at discovery will be necessary.
+              return resolve(res.filter(file => file.match(/.obj$/)));
+            });
+          }).then(files => ({ path, files }))
         )
         .then(({ path, files }) => {
           console.log('converting to gltf');

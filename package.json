@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"maybe add some tests, friend!\" && exit 0",
-    "commitmsg": "commitlint",
+    "commitmsg": "commitlint -e $GIT_PARAMS",
+    "precommit": "npm run lint",
     "lint": "eslint .",
     "sls": "serverless",
     "semantic-release": "semantic-release",
@@ -31,6 +32,7 @@
     "eslint-plugin-import": "^2.10.0",
     "eslint-plugin-jest": "^21.15.0",
     "eslint-plugin-prettier": "^2.6.0",
+    "husky": "^0.14.3",
     "prettier": "^1.11.1",
     "semantic-release": "^15.1.4",
     "serverless": "^1.26.1",
