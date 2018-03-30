@@ -9,22 +9,21 @@ const s3 = new S3({ region: process.env.S3_REGION }); // TODO - add creds
 
 const gltfOptions = {}; // TODO - may need to add some stuff here, see https://github.com/AnalyticalGraphicsInc/obj2gltf/blob/master/lib/obj2gltf.js#L20-L39
 
-module.exports = (event, context, cb) => {
-  const records = event.Records.filter(
-    record =>
-      record.eventSource === 'aws:s3' &&
-      record.eventName === 'ObjectCreated:Put'
-  );
-
+const converter = (event, context, cb) => {
   Promise.all(
-    records.map(record =>
+    event.Records.filter(
+      record =>
+        record.eventSource === 'aws:s3' &&
+        record.eventName === 'ObjectCreated:Put'
+    )
+    .map(record =>
       new Promise((resolve, reject) => {
-        console.log('making tmpdir');
+        console.log(`making tmpdir for ${record.s3.object.key}`);
         temp.mkdir(record.s3.object.key, (err, res) => {
           if (err) {
             return reject(err);
           }
-          return res;
+          return resolve(res);
         });
       })
         .then(
@@ -42,33 +41,25 @@ module.exports = (event, context, cb) => {
                 }
 
                 return resolve({
-                  path: `${tmpDir}/${record.s3.object.key}`,
-                  data: res,
+                  data: res.Body,
+                  tmpDir,
                 });
               });
             })
         )
         .then(
-          ({ path, data }) =>
+          ({ data, tmpDir: path }) =>
             new Promise((resolve, reject) => {
-              console.log('writing contents');
-              fs.writeFile(path, data, err => {
-                if (err) {
-                  return reject(err);
-                }
-                return resolve(path);
-              });
-            })
-        )
-        .then(
-          path =>
-            new Promise((resolve, reject) => {
-              console.log('unzipping');
+              console.log(`unzipping ${data.length} bytes`);
               const buffStream = new stream.PassThrough();
+              buffStream.end(data)
 
               buffStream
                 .pipe(unzip.Extract({ path }))
-                .on('close', () => resolve(path))
+                .on('close', () => {
+                  console.log('unzipped');
+                  resolve(path);
+                })
                 .on('error', err => reject(err));
             })
         )
@@ -76,7 +67,7 @@ module.exports = (event, context, cb) => {
           path =>
             new Promise((resolve, reject) => {
               console.log('finding obj files');
-              fs.readDir(path, (err, res) => {
+              fs.readdir(path, (err, res) => {
                 if (err) {
                   return reject(err);
                 }
@@ -84,19 +75,61 @@ module.exports = (event, context, cb) => {
                 // This assumes that the files to convert will all be *.obj. If that
                 // assumption is incorrect a different approach at discovery will be necessary.
                 return resolve(res.filter(file => file.match(/.obj$/)));
-              });
+              })
             })
+              .then(files => ({ path, files }))
         )
-        .then(objFiles => {
+        .then(({ path, files }) => {
           console.log('converting to gltf');
           return Promise.all(
-            objFiles.map(objFile => obj2gltf(objFile, gltfOptions))
+            files.map(objFile => obj2gltf(`${path}/${objFile}`, gltfOptions))
           );
         })
         .then(gltfs => gltfs.map(JSON.stringify))
         .then(gltfStrings => {
           console.log(`uploading ${gltfStrings.length} gltfs`);
           // TODO - each gltf string should be uploaded to its ultimate destination.
+          // HELLO FUTURE DEVELOPER! This is where you need to start working.
+          //           u
+          //      .  x!X
+          //    ."X M~~>
+          //   d~~XX~~~k    .u.xZ `\ \ "%
+          //  d~~~M!~~~?..+"~~~~~?:  "    h
+          // '~~~~~~~~~~~~~~~~~~~~~?      `
+          // 4~~~~~~~~~~~~~~~~~~~~~~>     '
+          // ':~~~~~~~~~~(X+"" X~~~~>    xHL
+          //  %~~~~~(X="      'X"!~~% :RMMMRMRs
+          //   ^"*f`          ' (~~~~~MMMMMMMMMMMx
+          //     f     /`   %   !~~~~~MMMMMMMMMMMMMc
+          //     F    ?      '  !~~~~~!MMMMMMMMMMMMMM.
+          //    ' .  :": "   :  !X""(~~?MMMMMMMMMMMMMMh
+          //    'x  .~  ^-+="   ? "f4!*  #MMMMMMMMMMMMMM.
+          //     /"               .."     `MMMMMMMMMMMMMM
+          //     h ..             '         #MMMMMMMMMMMM
+          //     f                '          @MMMMMMMMMMM
+          //   :         .:=""     >       dMMMMMMMMMMMMM
+          //   "+mm+=~("           RR     @MMMMMMMMMMMMM"
+          //           %          (MMNmHHMMMMMMMMMMMMMMF
+          //          uR5         @MMMMMMMMMMMMMMMMMMMF
+          //        dMRMM>       dMMMMMMMMMMMMMMMMMMMF
+          //       RM$MMMF=x..=" RMRM$MMMMMMMMMMMMMMF
+          //      MMMMMMM       'MMMMMMMMMMMMMMMMMMF
+          //     dMMRMMMK       'MMMMMMMMMMMMMMMMM"
+          //     RMMRMMME       3MMMMMMMMMMMMMMMM
+          //    @MMMMMMM>       9MMMMMMMMMMMMMMM~
+          //   'MMMMMMMM>       9MMMMMMMMMMMMMMF
+          //   tMMMMMMMM        9MMMMMMMMMMMMMM
+          //   MMMM$MMMM        9MMMMMMMMMMMMMM
+          //  'MMMMRMMMM        9MMMMMMMMMMMMM9
+          //  MMMMMMMMMM        9MMMMMMMMMMMMMM
+          //  RMMM$MMMMM        9MMMMMMMMMMMMMM
+          // tMMMMMMMMMM        9MMMMMMMMMMMMMX
+          // RMMMMMMMMMM        9MMMMMMMMMMMMME
+          // JMMMMMMMMMMM        MMMMMMMMMMMMMME
+          // 9MMMM$MMMMMM        RMMMMMMMMMMMMME
+          // MMMMMRMMMMMX        RMMMMMMMMMMMMMR
+          // RMMMMRMMMMME        EMMMMMMMMMMMMM!
+          // 9MMMMMMMMMME        MMMMMMMMMMMMMM>
         })
         .then(() => {
           console.log(`done with ${record.s3.object.key}`);
@@ -123,4 +156,8 @@ module.exports = (event, context, cb) => {
       console.error(err);
       cb(err);
     });
+};
+
+module.exports = {
+  converter,
 };
